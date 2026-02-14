@@ -3,9 +3,9 @@
 ဒီ starter က ကိုယ်စိတ်ကြိုက် UI ဆွဲပြီး chatbot app တည်ဆောက်ဖို့ အခြေခံ project ပါ။
 
 ## Included
-- **Frontend**: custom chat UI (login, history, model selector, streaming output)
-- **Backend**: Express API (login, models, history, chat stream)
-- **LLM**: OpenRouter API
+- **Frontend**: minimal glass dark chat UI (login, history, model selector, streaming output)
+- **Backend**: Express API (login, models, history, SSE stream)
+- **LLM**: OpenRouter API + Ko Paing system prompt
 
 ## Structure
 - `backend/server.js`

@@ -3,49 +3,119 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Custom Claw Chat</title>
+  <title>Ko Paing Web Chat</title>
   <style>
-    body { margin: 0; font-family: Inter, system-ui; background: #0b1020; color: #eef2ff; }
-    .wrap { max-width: 920px; margin: 20px auto; padding: 16px; }
-    .card { background: #121a33; border: 1px solid #263157; border-radius: 14px; padding: 14px; }
-    input, select, button, textarea { border-radius: 10px; border: 1px solid #33406f; background: #0f1630; color: #eef2ff; padding: 10px; }
-    button { cursor: pointer; background: #3258ff; border: none; }
+    :root {
+      --bg: #060b1a;
+      --card: rgba(17, 25, 48, 0.72);
+      --card-border: rgba(150, 176, 255, 0.2);
+      --text: #eaf0ff;
+      --muted: #9ba9cd;
+      --accent: #4f7cff;
+      --user: #2b3f7f;
+      --assistant: #18264d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;
+      color: var(--text);
+      background: radial-gradient(1200px 600px at 10% 0%, #192e66 0%, transparent 60%),
+                  radial-gradient(1000px 600px at 90% 0%, #1e2b52 0%, transparent 60%),
+                  var(--bg);
+      min-height: 100dvh;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 22px 14px; }
+    .title { font-size: 28px; font-weight: 700; margin: 0 0 6px; }
+    .sub { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    }
+
     .row { display: flex; gap: 10px; }
     .row > * { flex: 1; }
-    #chat { height: 420px; overflow: auto; padding: 10px; background:#0a1128; border-radius: 10px; margin: 12px 0; }
-    .msg { margin: 8px 0; padding: 10px; border-radius: 10px; white-space: pre-wrap; }
-    .user { background: #203065; }
-    .assistant { background: #182347; }
-    .muted { opacity: .8; font-size: 12px; }
+
+    input, select, button, textarea {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid #324577;
+      background: #0d1836;
+      color: var(--text);
+      padding: 11px 12px;
+      font-size: 14px;
+    }
+    input::placeholder, textarea::placeholder { color: #7184b8; }
+    button {
+      background: linear-gradient(180deg, #5a86ff 0%, #3c67e5 100%);
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.secondary {
+      background: #152447;
+      border: 1px solid #2f467b;
+    }
+
     .hidden { display: none; }
+
+    #chat {
+      height: 460px;
+      overflow: auto;
+      padding: 10px;
+      background: rgba(7, 13, 29, 0.72);
+      border: 1px solid #253a6a;
+      border-radius: 12px;
+      margin: 12px 0;
+    }
+    .msg {
+      margin: 8px 0;
+      padding: 11px 12px;
+      border-radius: 12px;
+      white-space: pre-wrap;
+      line-height: 1.45;
+      max-width: 85%;
+    }
+    .user { background: var(--user); margin-left: auto; }
+    .assistant { background: var(--assistant); margin-right: auto; }
+
+    .status { color: var(--muted); font-size: 12px; margin-top: 8px; min-height: 16px; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h2>Custom UI + Claw-Ready Chat Starter</h2>
+    <h1 class="title">Ko Paing Web Chat</h1>
+    <p class="sub">Minimal Glass Dark • Login-protected • Online-ready</p>
 
     <div id="loginCard" class="card">
-      <h3>Login</h3>
       <div class="row">
-        <input id="username" placeholder="username" value="admin" />
-        <input id="password" placeholder="password" type="password" value="admin123" />
+        <input id="username" placeholder="Username" autocomplete="username" />
+        <input id="password" placeholder="Password" type="password" autocomplete="current-password" />
       </div>
       <button id="loginBtn" style="margin-top:10px">Login</button>
-      <div id="loginStatus" class="muted"></div>
+      <div id="loginStatus" class="status"></div>
     </div>
 
     <div id="chatCard" class="card hidden" style="margin-top:14px;">
       <div class="row">
         <select id="modelSelect"></select>
-        <button id="clearHistoryBtn">Clear History</button>
-        <button id="logoutBtn">Logout</button>
+        <button class="secondary" id="clearHistoryBtn">Clear</button>
+        <button class="secondary" id="logoutBtn">Logout</button>
       </div>
+
       <div id="chat"></div>
-      <textarea id="input" rows="3" placeholder="Type message..."></textarea>
+
+      <textarea id="input" rows="3" placeholder="ကိုယ်ပြောချင်တာရေးပါ… (Enter = Send, Shift+Enter = New Line)"></textarea>
       <div class="row" style="margin-top:8px;">
         <button id="sendBtn">Send</button>
       </div>
-      <div id="chatStatus" class="muted"></div>
+      <div id="chatStatus" class="status"></div>
     </div>
   </div>
 
@@ -90,9 +160,13 @@ async function loadHistory(){
 
 async function login(){
   try{
-    setStatus('loginStatus','logging in...');
-    const r = await fetch(API+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('username').value,password:$('password').value})});
-    if(!r.ok) throw new Error('login failed');
+    setStatus('loginStatus','Logging in...');
+    const r = await fetch(API+'/api/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:$('username').value.trim(),password:$('password').value})
+    });
+    if(!r.ok) throw new Error('Login failed');
     const j = await r.json();
     token = j.token;
     localStorage.setItem('chat_token', token);
@@ -114,7 +188,7 @@ async function send(){
   localStorage.setItem('chat_model', model);
 
   try {
-    setStatus('chatStatus', 'streaming...');
+    setStatus('chatStatus', 'Thinking...');
     const r = await api('/api/chat', { method:'POST', body: JSON.stringify({ model, message:text }) });
     const reader = r.body.getReader();
     const decoder = new TextDecoder();
@@ -131,21 +205,31 @@ async function send(){
         if(!line) continue;
         const d = JSON.parse(line.slice(6));
         if(d.token) assistant.textContent += d.token;
-        if(d.error) assistant.textContent = 'Error: '+d.error;
+        if(d.error) assistant.textContent = 'Error: ' + d.error;
       }
       $('chat').scrollTop = $('chat').scrollHeight;
     }
-    setStatus('chatStatus', 'done');
+    setStatus('chatStatus', 'Ready');
   } catch(e){
-    assistant.textContent = 'Error: '+e.message;
+    assistant.textContent = 'Error: ' + e.message;
     setStatus('chatStatus', e.message);
   }
 }
 
 $('loginBtn').onclick = login;
 $('sendBtn').onclick = send;
+$('input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    send();
+  }
+});
 $('logoutBtn').onclick = () => { localStorage.removeItem('chat_token'); location.reload(); };
-$('clearHistoryBtn').onclick = async () => { await api('/api/history',{method:'DELETE'}); $('chat').innerHTML=''; };
+$('clearHistoryBtn').onclick = async () => {
+  await api('/api/history',{method:'DELETE'});
+  $('chat').innerHTML='';
+  setStatus('chatStatus', 'History cleared');
+};
 $('modelSelect').onchange = () => localStorage.setItem('chat_model',$('modelSelect').value);
 
 if(token){

@@ -14,6 +14,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+const SYSTEM_PROMPT = process.env.SYSTEM_PROMPT || 'You are Ko Paing (ကိုပိုင်), a calm, warm Myanmar assistant. Reply in Burmese for user-facing messages. Be concise, supportive, and practical.';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -114,7 +115,10 @@ app.post('/api/chat', auth, async (req, res) => {
       body: JSON.stringify({
         model: selectedModel,
         stream: true,
-        messages: messages.map(m => ({ role: m.role, content: m.content }))
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          ...messages.map(m => ({ role: m.role, content: m.content }))
+        ]
       })
     });
 
