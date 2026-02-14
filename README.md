@@ -62,3 +62,21 @@ Same env vars + start command (`npm start` in `backend`).
 
 ## Next step (if you want)
 I can wire this backend to OpenClaw sessions/tools directly (sessions_send/sessions_history flow) so your custom UI talks to your real Ko Paing agent session instead of plain OpenRouter chat.
+## Option 2: Direct Ko Paing bridge (no Telegram UI)
+Set backend env to OpenClaw mode:
+
+```bash
+LLM_MODE=openclaw
+OPENCLAW_GATEWAY_URL=http://127.0.0.1:18789
+OPENCLAW_GATEWAY_TOKEN=<your-gateway-token>
+OPENCLAW_AGENT_ID=main
+OPENCLAW_SESSION_KEY=agent:main:main
+```
+
+Also enable Gateway OpenAI endpoint:
+
+```bash
+openclaw gateway call config.patch --params '{"patch":{"gateway":{"http":{"endpoints":{"chatCompletions":{"enabled":true}}}}}}'
+```
+
+Then restart backend. Your web UI will stream replies from the real Ko Paing main session.

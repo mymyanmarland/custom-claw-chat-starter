@@ -13,8 +13,13 @@ const PORT = process.env.PORT || 8787;
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
+const LLM_MODE = (process.env.LLM_MODE || 'openrouter').toLowerCase();
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 const SYSTEM_PROMPT = process.env.SYSTEM_PROMPT || 'You are Ko Paing (ကိုပိုင်), a calm, warm Myanmar assistant. Reply in Burmese for user-facing messages. Be concise, supportive, and practical.';
+const OPENCLAW_GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789';
+const OPENCLAW_GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
+const OPENCLAW_AGENT_ID = process.env.OPENCLAW_AGENT_ID || 'main';
+const OPENCLAW_SESSION_KEY = process.env.OPENCLAW_SESSION_KEY || 'agent:main:main';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,17 +30,19 @@ const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(HISTORY_FILE)) fs.writeFileSync(HISTORY_FILE, '{}');
 
-const MODELS = [
-  'openrouter/auto',
-  'openai/gpt-4o-mini',
-  'openai/gpt-4.1-mini',
-  'openai/gpt-4.1',
-  'google/gemini-2.0-flash-001',
-  'anthropic/claude-3.5-sonnet',
-  'meta-llama/llama-3.3-70b-instruct',
-  'mistralai/mistral-large',
-  'deepseek/deepseek-chat'
-];
+const MODELS = LLM_MODE === 'openclaw'
+  ? [`openclaw:${OPENCLAW_AGENT_ID}`]
+  : [
+      'openrouter/auto',
+      'openai/gpt-4o-mini',
+      'openai/gpt-4.1-mini',
+      'openai/gpt-4.1',
+      'google/gemini-2.0-flash-001',
+      'anthropic/claude-3.5-sonnet',
+      'meta-llama/llama-3.3-70b-instruct',
+      'mistralai/mistral-large',
+      'deepseek/deepseek-chat'
+    ];
 
 app.use(cors());
 app.use(express.json());
@@ -60,7 +67,7 @@ function auth(req, res, next) {
   }
 }
 
-app.get('/health', (_, res) => res.json({ ok: true }));
+app.get('/health', (_, res) => res.json({ ok: true, mode: LLM_MODE }));
 
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body || {};
@@ -101,29 +108,52 @@ app.post('/api/chat', auth, async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   try {
-    const key = OPENROUTER_API_KEY;
-    if (!key) throw new Error('Server missing OPENROUTER_API_KEY');
+    let upstream;
 
-    const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${key}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost',
-        'X-Title': 'Custom Claw Chat Starter'
-      },
-      body: JSON.stringify({
-        model: selectedModel,
-        stream: true,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          ...messages.map(m => ({ role: m.role, content: m.content }))
-        ]
-      })
-    });
+    if (LLM_MODE === 'openclaw') {
+      if (!OPENCLAW_GATEWAY_TOKEN) throw new Error('Server missing OPENCLAW_GATEWAY_TOKEN');
+      upstream = await fetch(`${OPENCLAW_GATEWAY_URL}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENCLAW_GATEWAY_TOKEN}`,
+          'Content-Type': 'application/json',
+          'x-openclaw-agent-id': OPENCLAW_AGENT_ID,
+          'x-openclaw-session-key': OPENCLAW_SESSION_KEY
+        },
+        body: JSON.stringify({
+          model: `openclaw:${OPENCLAW_AGENT_ID}`,
+          stream: true,
+          user: req.user.username,
+          messages: [
+            { role: 'user', content: message }
+          ]
+        })
+      });
+    } else {
+      const key = OPENROUTER_API_KEY;
+      if (!key) throw new Error('Server missing OPENROUTER_API_KEY');
+
+      upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'http://localhost',
+          'X-Title': 'Custom Claw Chat Starter'
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          stream: true,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            ...messages.map(m => ({ role: m.role, content: m.content }))
+          ]
+        })
+      });
+    }
 
     if (!upstream.ok || !upstream.body) {
-      throw new Error(`OpenRouter error ${upstream.status}`);
+      throw new Error(`Upstream error ${upstream.status}`);
     }
 
     const reader = upstream.body.getReader();
