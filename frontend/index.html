@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Custom Claw Chat</title>
+  <style>
+    body { margin: 0; font-family: Inter, system-ui; background: #0b1020; color: #eef2ff; }
+    .wrap { max-width: 920px; margin: 20px auto; padding: 16px; }
+    .card { background: #121a33; border: 1px solid #263157; border-radius: 14px; padding: 14px; }
+    input, select, button, textarea { border-radius: 10px; border: 1px solid #33406f; background: #0f1630; color: #eef2ff; padding: 10px; }
+    button { cursor: pointer; background: #3258ff; border: none; }
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; }
+    #chat { height: 420px; overflow: auto; padding: 10px; background:#0a1128; border-radius: 10px; margin: 12px 0; }
+    .msg { margin: 8px 0; padding: 10px; border-radius: 10px; white-space: pre-wrap; }
+    .user { background: #203065; }
+    .assistant { background: #182347; }
+    .muted { opacity: .8; font-size: 12px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h2>Custom UI + Claw-Ready Chat Starter</h2>
+
+    <div id="loginCard" class="card">
+      <h3>Login</h3>
+      <div class="row">
+        <input id="username" placeholder="username" value="admin" />
+        <input id="password" placeholder="password" type="password" value="admin123" />
+      </div>
+      <button id="loginBtn" style="margin-top:10px">Login</button>
+      <div id="loginStatus" class="muted"></div>
+    </div>
+
+    <div id="chatCard" class="card hidden" style="margin-top:14px;">
+      <div class="row">
+        <select id="modelSelect"></select>
+        <button id="clearHistoryBtn">Clear History</button>
+        <button id="logoutBtn">Logout</button>
+      </div>
+      <div id="chat"></div>
+      <textarea id="input" rows="3" placeholder="Type message..."></textarea>
+      <div class="row" style="margin-top:8px;">
+        <button id="sendBtn">Send</button>
+      </div>
+      <div id="chatStatus" class="muted"></div>
+    </div>
+  </div>
+
+<script>
+const API = window.location.origin;
+const $ = id => document.getElementById(id);
+let token = localStorage.getItem('chat_token') || '';
+
+function setStatus(id, text){ $(id).textContent = text || ''; }
+function addMsg(role, content){
+  const d = document.createElement('div');
+  d.className = `msg ${role}`;
+  d.textContent = content;
+  $('chat').appendChild(d);
+  $('chat').scrollTop = $('chat').scrollHeight;
+  return d;
+}
+
+async function api(path, opts={}){
+  const headers = { 'Content-Type':'application/json', ...(opts.headers||{}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const r = await fetch(API + path, { ...opts, headers });
+  if (!r.ok) throw new Error(await r.text());
+  return r;
+}
+
+async function loadModels(){
+  const r = await api('/api/models');
+  const j = await r.json();
+  const m = $('modelSelect');
+  m.innerHTML='';
+  j.models.forEach(x=>{ const o=document.createElement('option'); o.value=x; o.textContent=x; m.appendChild(o); });
+  m.value = localStorage.getItem('chat_model') || 'openrouter/auto';
+}
+
+async function loadHistory(){
+  const r = await api('/api/history');
+  const j = await r.json();
+  $('chat').innerHTML='';
+  (j.messages||[]).forEach(m=>addMsg(m.role,m.content));
+}
+
+async function login(){
+  try{
+    setStatus('loginStatus','logging in...');
+    const r = await fetch(API+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('username').value,password:$('password').value})});
+    if(!r.ok) throw new Error('login failed');
+    const j = await r.json();
+    token = j.token;
+    localStorage.setItem('chat_token', token);
+    $('loginCard').classList.add('hidden');
+    $('chatCard').classList.remove('hidden');
+    await loadModels();
+    await loadHistory();
+    setStatus('loginStatus','');
+  }catch(e){ setStatus('loginStatus', e.message); }
+}
+
+async function send(){
+  const text = $('input').value.trim();
+  if(!text) return;
+  $('input').value='';
+  addMsg('user', text);
+  const assistant = addMsg('assistant', '');
+  const model = $('modelSelect').value;
+  localStorage.setItem('chat_model', model);
+
+  try {
+    setStatus('chatStatus', 'streaming...');
+    const r = await api('/api/chat', { method:'POST', body: JSON.stringify({ model, message:text }) });
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buf='';
+
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      buf += decoder.decode(value, {stream:true});
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+      for(const p of parts){
+        const line = p.split('\n').find(x=>x.startsWith('data: '));
+        if(!line) continue;
+        const d = JSON.parse(line.slice(6));
+        if(d.token) assistant.textContent += d.token;
+        if(d.error) assistant.textContent = 'Error: '+d.error;
+      }
+      $('chat').scrollTop = $('chat').scrollHeight;
+    }
+    setStatus('chatStatus', 'done');
+  } catch(e){
+    assistant.textContent = 'Error: '+e.message;
+    setStatus('chatStatus', e.message);
+  }
+}
+
+$('loginBtn').onclick = login;
+$('sendBtn').onclick = send;
+$('logoutBtn').onclick = () => { localStorage.removeItem('chat_token'); location.reload(); };
+$('clearHistoryBtn').onclick = async () => { await api('/api/history',{method:'DELETE'}); $('chat').innerHTML=''; };
+$('modelSelect').onchange = () => localStorage.setItem('chat_model',$('modelSelect').value);
+
+if(token){
+  $('loginCard').classList.add('hidden');
+  $('chatCard').classList.remove('hidden');
+  loadModels().then(loadHistory).catch(()=>{ localStorage.removeItem('chat_token'); location.reload(); });
+}
+</script>
+</body>
+</html>
